@@ -38,6 +38,10 @@ td input{width:140px} td.ro{color:var(--mu)} .lnk{color:var(--acc);cursor:pointe
 .be{display:none} tr.sel .be{display:inline-block}
 .hint{background:#fffbeb;border:1px solid #fde68a;color:#92400e;font-size:.78rem;padding:8px 12px;margin:0 20px 10px;border-radius:6px}
 .empty{padding:30px;text-align:center;color:var(--mu)}
+.dt td{white-space:normal;word-break:break-word;background:#fff;padding:5px 6px;font-size:.72rem;vertical-align:top}
+.dt th{white-space:normal;padding:6px;font-size:.7rem;vertical-align:bottom}
+.dt td input{width:100%}
+.dt .fz{position:sticky}.dt td.fz{z-index:3}.dt th.fz{z-index:8}.dt .fzl{box-shadow:3px 0 0 #94a3b8}
 #ld{display:none;position:fixed;inset:0;background:rgba(15,23,42,.35);z-index:999;align-items:center;justify-content:center;color:#fff;font-weight:600}
 </style>
 </head>
@@ -69,6 +73,18 @@ var C_FECHAS = [21, 24, 29, 30, 32], C_NUM = [19, 23];
 var REPET = [7, 9, 21, 22, 23, 26, 27, 28, 29, 30, 31, 32, 33]; // columnas con "repetir datos"
 var X = { ODS: 2, HOSP: 7, LIM: 10 };        // índices en 5 EXPEDIENTES
 var MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+var HDR_DET = ["ID FILA","ID EXPEDIENTE","HOSPITAL","ODS","FECHA ODS","NO. DE EVENTO","NO. ORDEN REPOSICION CONTRATO","FACTURA","MONTO PEDIDO SIN IVA","ESTATUS DE PAGO","PEDIDO","FECHA LIMITE DE ENTREGA PEDIDO","FECHA DE ALTA","CLAVE O CODIGO","DIFERENCIAL Y VARIANTE","DESCRIPCION","PRESENTACION","MARCA","CANT. TOTAL","CANT. SURTIDA","PRECIO","FECHA DE LLEGADA","NO. DE SALIDA","CANT. PENDIENTE","CADUCIDAD","LOTE","REGISTRO SANITARIO","ORIGEN","SURTIDO EN ALMACEN","FECHA TENTATIVA SALIDA DE ENTREGA","FECHA ENTREGA DEL MATERIAL","NO. DE OC","F. OC","FOLIO DESARROLLO COMERCIAL","DATOS DE LA CLAVE","FOLIO FINANZAS"];
+var HDR_EXP = ["ID EXPEDIENTE","FECHA","ODS","ID UNIDAD","UNIDAD","CLAVE","ID HOSPITAL","HOSPITAL","NO. DE EVENTO","OCPI","FECHA LIMITE DE ENTREGA PEDIDO","USUARIO QUE REGISTRA","CUENTA","ESTATUS EXPEDIENTE","FECHA DE GENERACION DE DOCUMENTOS","CONTEO GENERAR ARCHIVO","FOLIO FINANZAS","FACTURA 1","PDF FACTURA 1","FACTURA 2","PDF FACTURA 2","FACTURA 3","PDF FACTURA 3","FACTURA 4","PDF FACTURA 4"];
+function hdrDet(i) { return HDR_DET[i] || (S.det && S.det.headers[i]) || ''; }
+function hdrExp(i) { return HDR_EXP[i] || (S.exp && S.exp.headers[i]) || ''; }
+/* Detalle: columnas inmovilizadas hasta CANT. TOTAL (índice 18). Anchos en px; DESCRIPCION (15) se calcula = mitad de su ancho natural */
+var FROZEN_LAST = 18, NW = 96;
+var W_DET = {2:80,3:45,4:72,5:70,6:80,7:90,8:70,9:90,10:70,11:72,12:72,13:85,14:45,16:60,17:70,18:50};
+function colW(c) { return W_DET[c] || (c > FROZEN_LAST ? (C_FECHAS.indexOf(c) >= 0 ? 130 : 120) : 80); }
+function medir(txts) {
+  var cx = document.createElement('canvas').getContext('2d'), m = 0; cx.font = '12px "Exo 2", sans-serif';
+  txts.forEach(function (t) { var w = cx.measureText(String(t)).width; if (w > m) m = w; }); return Math.ceil(m) + 16;
+}
 var S = { ses: null, exp: null, tab: '', det: null, view: [], f: {} };
 
 var $ = function (id) { return document.getElementById(id); };
@@ -187,7 +203,7 @@ function pintarExp(area, conservarFoco) {
   }
   h += '<button class="g" onclick="cargarExp()">Actualizar</button><button class="ok" onclick="xlsExp()">Descargar Excel</button></div>';
   if (canEd) h += '<div class="hint">Edita los campos de factura y da clic en <b>Guardar</b> en la fila. Los PDF se suben a la carpeta de Drive del expediente.</div>';
-  h += '<div class="wrap"><table><thead><tr><th>Acciones</th>' + cols.map(function (i) { return '<th>' + esc(j.headers[i]) + '</th>'; }).join('') + '</tr></thead><tbody>';
+  h += '<div class="wrap"><table><thead><tr><th>Acciones</th>' + cols.map(function (i) { return '<th>' + esc(hdrExp(i)) + '</th>'; }).join('') + '</tr></thead><tbody>';
   if (!S.view.length) h += '<tr><td colspan="' + (cols.length + 1) + '" class="empty">Sin registros.</td></tr>';
   S.view.forEach(function (r, n) {
     h += '<tr data-n="' + n + '" onclick="selFila(' + n + ')"><td>' +
@@ -236,7 +252,7 @@ function subir(n, col, inp) {
 }
 function xlsExp() {
   var j = S.exp, cols = []; j.headers.forEach(function (h, i) { if (HID_EXP.indexOf(i) < 0) cols.push(i); });
-  xls(cols.map(function (i) { return j.headers[i]; }), S.view.map(function (r) { return cols.map(function (i) { return r.v[i]; }); }), 'EXPEDIENTES_' + S.tab);
+  xls(cols.map(function (i) { return hdrExp(i); }), S.view.map(function (r) { return cols.map(function (i) { return r.v[i]; }); }), 'EXPEDIENTES_' + S.tab);
 }
 function xls(head, filas, nombre) {
   var ws = XLSX.utils.aoa_to_sheet([head].concat(filas)), wb = XLSX.utils.book_new();
@@ -267,21 +283,34 @@ function actualizarDetalle() {
 function edCol(i) { return S.ses.editDet.indexOf(i) >= 0; }
 function repCols() { return REPET.filter(edCol); }
 function pintarDetalle() {
-  var d = S.det, ed = S.ses.editDet.length > 0, rc = repCols(), cols = [];
+  var d = S.det, ed = S.ses.editDet.length > 0, rc = repCols(), cols = [], W = {}, L = {}, cortado = false, ultFz = -1;
   d.headers.forEach(function (h, i) { if (HID_DET.indexOf(i) < 0) cols.push(i); });
+  var tope = Math.max(600, window.innerWidth - 40) * 0.6, otros = NW;
+  cols.forEach(function (c) { if (c !== 15 && c <= FROZEN_LAST) otros += colW(c); });
+  var descW = Math.max(160, Math.min(Math.round(medir(d.rows.map(function (r) { return r.v[15]; })) / 2), Math.round(tope - otros)));
+  var total = NW, acc = NW;
+  cols.forEach(function (c) {
+    W[c] = c === 15 ? descW : colW(c); total += W[c];
+    if (c <= FROZEN_LAST && !cortado) { if (acc + W[c] <= tope) { L[c] = acc; acc += W[c]; ultFz = c; } else cortado = true; }
+  });
+  function cz(c) { return L[c] !== undefined ? ' fz' + (c === ultFz ? ' fzl' : '') : ''; }
+  function st(c) { return L[c] !== undefined ? ' style="left:' + L[c] + 'px"' : ''; }
   var h = '<div class="bar"><h2>ODS ' + esc(d.ods) + ' · ' + esc(d.hosp) + ' · ' + d.rows.length + ' clave(s)</h2>' +
     (rc.length ? '<button class="w" onclick="repetirTodas()">Repetir datos en todas las filas</button>' : '') +
     (ed ? '<button class="ok" onclick="guardarDetalle()">Guardar cambios</button>' : '') +
     '<button class="g" onclick="actualizarDetalle()">Actualizar</button><button class="ok" onclick="xlsDet()">Descargar Excel</button><button class="bad" onclick="cerrarDetalle()">Cerrar</button></div>';
   if (ed) h += '<div class="hint">Solo puedes editar las columnas de tu área. Revisa los datos antes de guardar.</div>';
-  h += '<div class="wrap"><table><thead><tr><th>#</th>' + cols.map(function (i) { return '<th>' + esc(d.headers[i]) + '</th>'; }).join('') + '</tr></thead><tbody>';
+  if (cortado) h += '<div class="hint">Por el ancho de tu pantalla solo se inmovilizaron las columnas hasta «' + esc(hdrDet(ultFz)) + '». Reduce el zoom del navegador (Ctrl y −) para inmovilizar hasta CANT. TOTAL.</div>';
+  h += '<div class="wrap"><table class="dt" style="width:' + total + 'px;table-layout:fixed"><colgroup><col style="width:' + NW + 'px">' +
+    cols.map(function (c) { return '<col style="width:' + W[c] + 'px">'; }).join('') + '</colgroup><thead><tr><th class="fz' + (ultFz < 0 ? ' fzl' : '') + '" style="left:0">#</th>' +
+    cols.map(function (c) { return '<th class="' + cz(c).trim() + '"' + st(c) + '>' + esc(hdrDet(c)) + '</th>'; }).join('') + '</tr></thead><tbody>';
   if (!d.rows.length) h += '<tr><td colspan="' + (cols.length + 1) + '" class="empty">Este expediente no tiene claves en CUADRO ACTUAL.</td></tr>';
   d.rows.forEach(function (r, n) {
-    h += '<tr data-n="' + n + '"><td>' + (n + 1) + (rc.length && n > 0 ? '<br><button class="w" style="font-size:.68rem;padding:4px 6px" onclick="repetirAnterior(' + n + ')">Repetir datos de la fila anterior</button>' : '') + '</td>';
+    h += '<tr data-n="' + n + '"><td class="fz' + (ultFz < 0 ? ' fzl' : '') + '" style="left:0">' + (n + 1) + (rc.length && n > 0 ? '<br><button class="w" style="font-size:.62rem;padding:3px 5px;margin-top:3px;line-height:1.15" onclick="repetirAnterior(' + n + ')">Repetir datos de la fila anterior</button>' : '') + '</td>';
     cols.forEach(function (i) {
       var v = r.v[i];
-      if (edCol(i)) h += '<td><input data-c="' + i + '" type="' + (C_FECHAS.indexOf(i) >= 0 ? 'date' : C_NUM.indexOf(i) >= 0 ? 'number' : 'text') + '" ' + (C_NUM.indexOf(i) >= 0 ? 'min="0" step="any" ' : '') + 'value="' + esc(v) + '" oninput="marcar(' + n + ',' + i + ',this)"></td>';
-      else h += '<td class="ro">' + esc(v) + '</td>';
+      if (edCol(i)) h += '<td class="' + cz(i).trim() + '"' + st(i) + '><input data-c="' + i + '" type="' + (C_FECHAS.indexOf(i) >= 0 ? 'date' : C_NUM.indexOf(i) >= 0 ? 'number' : 'text') + '" ' + (C_NUM.indexOf(i) >= 0 ? 'min="0" step="any" ' : '') + 'value="' + esc(v) + '" oninput="marcar(' + n + ',' + i + ',this)"></td>';
+      else h += '<td class="ro' + cz(i) + '"' + st(i) + '>' + esc(v) + '</td>';
     });
     h += '</tr>';
   });
@@ -320,7 +349,7 @@ function guardarDetalle() {
 }
 function xlsDet() {
   var d = S.det, cols = []; d.headers.forEach(function (h, i) { if (HID_DET.indexOf(i) < 0) cols.push(i); });
-  xls(cols.map(function (i) { return d.headers[i]; }), d.rows.map(function (r, n) { return cols.map(function (i) { var x = d.dirty[n]; return (x && x[i] !== undefined) ? x[i] : r.v[i]; }); }), 'ODS_' + d.ods);
+  xls(cols.map(function (i) { return hdrDet(i); }), d.rows.map(function (r, n) { return cols.map(function (i) { var x = d.dirty[n]; return (x && x[i] !== undefined) ? x[i] : r.v[i]; }); }), 'ODS_' + d.ods);
 }
 
 /* ── Diagnóstico de conexión ── */
