@@ -102,6 +102,7 @@ function post(accion, data) {
 function doLogin() {
   var c = $('lc').value.trim(), p = $('lp').value;
   if (!c || !p) { $('lerr').textContent = 'Ingresa cuenta y contraseña.'; return; }
+  if (!/^https:\/\/script\.google\.com\/.+\/exec$/.test(GAS_URL)) { $('lerr').textContent = 'Falta pegar la URL de la Web App (GAS_URL) en index.html. Debe terminar en /exec.'; return; }
   $('lb').disabled = true; $('lerr').textContent = '';
   fetch(GAS_URL + '?action=login&data=' + encodeURIComponent(JSON.stringify({ correo: c, password: p, recordar: $('lr').checked })))
     .then(function (r) { return r.json(); })
@@ -109,7 +110,7 @@ function doLogin() {
       $('lb').disabled = false;
       if (!j.ok) { $('lerr').textContent = j.msg || j.error || 'No se pudo iniciar sesión.'; return; }
       S.ses = j; guardarSes(); entrar();
-    }).catch(function () { $('lb').disabled = false; $('lerr').textContent = 'No se pudo conectar con el servidor.'; });
+    }).catch(function (e) { $('lb').disabled = false; $('lerr').textContent = 'No se pudo conectar: ' + e.message + '. Abre la URL de la Web App en el navegador para ver si responde JSON (publicada con acceso "Cualquier persona").'; });
 }
 function entrar() {
   $('login').style.display = 'none'; $('app').style.display = 'flex';
