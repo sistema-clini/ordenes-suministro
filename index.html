@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Órdenes de Suministro · Comercializadora Lini</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=Exo+2:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.10.8/dist/sweetalert2.all.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--pri:#0f172a;--acc:#4f46e5;--ok:#10b981;--bad:#ef4444;--warn:#f59e0b;--bg:#f1f5f9;--bd:#e2e8f0;--tx:#1e293b;--mu:#64748b}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Exo 2',sans-serif;background:var(--bg);color:var(--tx);min-height:100vh}
+button{font-family:inherit;cursor:pointer;border:0;border-radius:6px;padding:7px 12px;font-size:.8rem;font-weight:600;color:#fff;background:var(--acc)}
+button.g{background:#fff;color:var(--tx);border:1px solid var(--bd)} button.ok{background:var(--ok)} button.bad{background:var(--bad)} button.w{background:var(--warn);color:#000}
+button:disabled{opacity:.5;cursor:wait}
+input,select{font-family:inherit;font-size:.8rem;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;background:#fff}
+/* LOGIN */
+#login{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#0b1120,#1e1b4b)}
+.lbox{background:#fff;border-radius:12px;padding:32px;width:340px;display:flex;flex-direction:column;gap:12px}
+.lbox h1{font-family:'Rajdhani';letter-spacing:2px;text-transform:uppercase;font-size:1.3rem}
+.lbox input{width:100%;padding:10px} #lerr{color:var(--bad);font-size:.8rem;min-height:1em}
+/* APP */
+#app{display:none;flex-direction:column;min-height:100vh}
+.top{background:linear-gradient(135deg,#0b1120,var(--pri));color:#fff;display:flex;align-items:center;gap:14px;padding:10px 20px;position:sticky;top:0;z-index:50}
+.top b{font-family:'Rajdhani';letter-spacing:2px;text-transform:uppercase;font-size:1.05rem}.top .r{margin-left:auto;display:flex;gap:10px;align-items:center;font-size:.8rem}
+.tabs{display:flex;gap:4px;padding:10px 20px 0;background:#fff;border-bottom:2px solid var(--bd);overflow-x:auto}
+.tab{background:none;color:var(--mu);border-radius:8px 8px 0 0;padding:10px 18px;font-size:.82rem;letter-spacing:.5px}
+.tab.on{background:var(--acc);color:#fff}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 20px}
+.bar h2{font-family:'Rajdhani';font-size:1.1rem;margin-right:auto}
+.wrap{margin:0 20px 20px;overflow:auto;max-height:calc(100vh - 215px);background:#fff;border:1px solid var(--bd);border-radius:8px}
+table{border-collapse:separate;border-spacing:0;font-size:.76rem;width:max-content;min-width:100%}
+th{position:sticky;top:0;z-index:5;background:var(--pri);color:#fff;padding:8px 10px;text-align:left;white-space:nowrap;font-weight:600}
+td{padding:6px 10px;border-bottom:1px solid var(--bd);white-space:nowrap;vertical-align:middle}
+tr:hover td{background:#eef2ff} tr.sel td{background:#e0e7ff} tr.dirty td{background:#fef9c3}
+td input{width:140px} td.ro{color:var(--mu)} .lnk{color:var(--acc);cursor:pointer;font-weight:600;text-decoration:underline}
+.be{display:none} tr.sel .be{display:inline-block}
+.hint{background:#fffbeb;border:1px solid #fde68a;color:#92400e;font-size:.78rem;padding:8px 12px;margin:0 20px 10px;border-radius:6px}
+.empty{padding:30px;text-align:center;color:var(--mu)}
+#ld{display:none;position:fixed;inset:0;background:rgba(15,23,42,.35);z-index:999;align-items:center;justify-content:center;color:#fff;font-weight:600}
+</style>
+</head>
+<body>
+<div id="login"><div class="lbox">
+  <h1>Órdenes de Suministro</h1><div style="color:var(--mu);font-size:.8rem">Comercializadora Lini · Inicia sesión</div>
+  <input id="lc" type="text" placeholder="Cuenta" autocomplete="username">
+  <input id="lp" type="password" placeholder="Contraseña" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+  <label style="font-size:.8rem"><input id="lr" type="checkbox" style="width:auto"> Mantener sesión</label>
+  <div id="lerr"></div><button id="lb" onclick="doLogin()">Entrar</button>
+</div></div>
+
+<div id="app">
+  <div class="top"><b>Órdenes de Suministro · Lini</b><div class="r"><span id="who"></span><button class="g" onclick="logout()">Salir</button></div></div>
+  <div class="tabs" id="tabs"></div>
+  <div id="main"></div>
+</div>
+<div id="ld">Cargando…</div>
+
+<script>
+/* ═══ CONFIGURACIÓN: pega aquí la URL de tu Web App de Apps Script (termina en /exec) ═══ */
+var GAS_URL = 'PEGA_AQUI_LA_URL_DE_TU_WEB_APP/exec';
+
+var HID_EXP = [3, 6, 12, 14, 15];            // columnas de 5 EXPEDIENTES que no se muestran
+var HID_DET = [0, 1, 34];                    // columnas de CUADRO ACTUAL que no se muestran
+var E_EDIT = [16, 17, 19, 21, 23], E_FILES = [18, 20, 22, 24];
+var C_FECHAS = [21, 24, 29, 30, 32], C_NUM = [19, 23];
+var REPET = [7, 9, 21, 22, 23, 26, 27, 28, 29, 30, 31, 32, 33]; // columnas con "repetir datos"
+var X = { ODS: 2, HOSP: 7, LIM: 10 };        // índices en 5 EXPEDIENTES
+var MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+var S = { ses: null, exp: null, tab: '', det: null, view: [], f: {} };
+
+var $ = function (id) { return document.getElementById(id); };
+function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+function busy(on) { $('ld').style.display = on ? 'flex' : 'none'; }
+function toast(t, icon) { Swal.fire({ toast: true, position: 'top-end', icon: icon || 'success', title: t, showConfirmButton: false, timer: 2500 }); }
+
+/* ── Sesión ── */
+try { var _r = localStorage.getItem('lini_ods') || sessionStorage.getItem('lini_ods'); if (_r) S.ses = JSON.parse(_r); } catch (e) {}
+function guardarSes() {
+  var raw = JSON.stringify(S.ses);
+  try { if (S.ses.recordar) { localStorage.setItem('lini_ods', raw); sessionStorage.removeItem('lini_ods'); } else { sessionStorage.setItem('lini_ods', raw); localStorage.removeItem('lini_ods'); } } catch (e) {}
+}
+function logout() { try { localStorage.removeItem('lini_ods'); sessionStorage.removeItem('lini_ods'); } catch (e) {} location.reload(); }
+
+/* ── API ── */
+function chk(j) {
+  if (j && j.noAuth) { Swal.fire('Sesión', j.error, 'warning').then(logout); throw new Error('noAuth'); }
+  if (j && j.nuevoToken && S.ses) { S.ses.token = j.nuevoToken; guardarSes(); }
+  return j;
+}
+function api(action, data) {
+  data = Object.assign({ token: S.ses ? S.ses.token : '' }, data || {});
+  return fetch(GAS_URL + '?action=' + action + '&data=' + encodeURIComponent(JSON.stringify(data))).then(function (r) { return r.json(); }).then(chk);
+}
+function post(accion, data) {
+  data = Object.assign({ accion: accion, token: S.ses.token }, data);
+  return fetch(GAS_URL, { method: 'POST', body: JSON.stringify(data) }).then(function (r) { return r.json(); }).then(chk);
+}
+
+/* ── Login ── */
+function doLogin() {
+  var c = $('lc').value.trim(), p = $('lp').value;
+  if (!c || !p) { $('lerr').textContent = 'Ingresa cuenta y contraseña.'; return; }
+  $('lb').disabled = true; $('lerr').textContent = '';
+  fetch(GAS_URL + '?action=login&data=' + encodeURIComponent(JSON.stringify({ correo: c, password: p, recordar: $('lr').checked })))
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      $('lb').disabled = false;
+      if (!j.ok) { $('lerr').textContent = j.msg || j.error || 'No se pudo iniciar sesión.'; return; }
+      S.ses = j; guardarSes(); entrar();
+    }).catch(function () { $('lb').disabled = false; $('lerr').textContent = 'No se pudo conectar con el servidor.'; });
+}
+function entrar() {
+  $('login').style.display = 'none'; $('app').style.display = 'flex';
+  $('who').textContent = S.ses.nombre + ' · ' + S.ses.tipoVista;
+  S.tab = S.ses.vistas[0]; pintarTabs(); cargarExp(true);
+}
+function pintarTabs() {
+  var h = S.ses.vistas.map(function (v) { return '<button class="tab' + (S.tab === v ? ' on' : '') + '" onclick="irTab(\'' + v + '\')">' + v + '</button>'; }).join('');
+  if (S.det) h += '<button class="tab' + (S.tab === 'DETALLE' ? ' on' : '') + '" onclick="irTab(\'DETALLE\')">DETALLE ODS ' + esc(S.det.ods) + '</button>';
+  $('tabs').innerHTML = h;
+}
+function irTab(t) { S.tab = t; pintarTabs(); pintar(); }
+function cargarExp(pintarYa) {
+  busy(true);
+  return api('expedientes').then(function (j) {
+    busy(false);
+    if (!j.ok) { Swal.fire('Error', j.error, 'error'); return; }
+    j.rows.sort(function (a, b) { return String(b.v[2]).localeCompare(String(a.v[2]), 'es', { numeric: true }); }); // ODS descendente
+    S.exp = j; if (pintarYa !== false) pintar();
+  }).catch(function (e) { busy(false); if (e.message !== 'noAuth') Swal.fire('Error', 'No se pudo cargar: ' + e.message, 'error'); });
+}
+function pintar() { if (!S.exp) return; if (S.tab === 'DETALLE' && S.det) pintarDetalle(); else pintarExp(S.tab); }
+
+/* ── Fechas / filtros de LOGÍSTICA ── */
+function pf(s) {
+  s = String(s || ''); var m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); return m ? new Date(+m[3], +m[2] - 1, +m[1]) : null;
+}
+function semISO(d) { var t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())), n = t.getUTCDay() || 7; t.setUTCDate(t.getUTCDate() + 4 - n); return Math.ceil(((t - Date.UTC(t.getUTCFullYear(), 0, 1)) / 864e5 + 1) / 7); }
+function diasPara(s) { var d = pf(s); if (!d) return null; var h = new Date(); h = new Date(h.getFullYear(), h.getMonth(), h.getDate()); return Math.round((d - h) / 864e5); }
+function filtrar(rows) {
+  var f = S.f;
+  return rows.filter(function (r) {
+    var v = r.v, d = pf(v[X.LIM]);
+    if (f.hosp && v[X.HOSP] !== f.hosp) return false;
+    if (f.ods && String(v[X.ODS]).toLowerCase().indexOf(f.ods.toLowerCase()) < 0) return false;
+    if (f.fecha && (!d || (d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2)) !== f.fecha)) return false;
+    if (f.sem && (!d || semISO(d) !== Number(f.sem))) return false;
+    if (f.mes && (!d || d.getMonth() + 1 !== Number(f.mes))) return false;
+    return true;
+  });
+}
+function setF(k, v) { S.f[k] = v; pintarExp('LOGISTICA', true); }
+
+/* ── Tabla 5 EXPEDIENTES (misma en todas las pestañas) ── */
+function pintarExp(area, conservarFoco) {
+  var j = S.exp, canEd = S.ses.editExp && area === 'FINANZAS', logi = area === 'LOGISTICA';
+  var cols = []; j.headers.forEach(function (h, i) { if (HID_EXP.indexOf(i) < 0) cols.push(i); });
+  S.view = logi ? filtrar(j.rows) : j.rows;
+  var h = '<div class="bar"><h2>' + area + ' · Expedientes</h2>';
+  if (logi) {
+    var hs = {}; j.rows.forEach(function (r) { if (r.v[X.HOSP]) hs[r.v[X.HOSP]] = 1; });
+    h += '<select onchange="setF(\'hosp\',this.value)"><option value="">Hospital: todos</option>' + Object.keys(hs).sort().map(function (k) { return '<option' + (S.f.hosp === k ? ' selected' : '') + '>' + esc(k) + '</option>'; }).join('') + '</select>' +
+      '<input placeholder="ODS" value="' + esc(S.f.ods || '') + '" oninput="S.f.ods=this.value" onchange="setF(\'ods\',this.value)" style="width:110px">' +
+      '<label style="font-size:.75rem">Fecha límite <input type="date" value="' + esc(S.f.fecha || '') + '" onchange="setF(\'fecha\',this.value)"></label>' +
+      '<input type="number" min="1" max="53" placeholder="Semana" value="' + esc(S.f.sem || '') + '" onchange="setF(\'sem\',this.value)" style="width:90px">' +
+      '<select onchange="setF(\'mes\',this.value)"><option value="">Mes: todos</option>' + MESES.map(function (m, i) { return '<option value="' + (i + 1) + '"' + (String(S.f.mes) === String(i + 1) ? ' selected' : '') + '>' + m + '</option>'; }).join('') + '</select>' +
+      '<button class="g" onclick="S.f={};pintarExp(\'LOGISTICA\')">Limpiar filtros</button>';
+  }
+  h += '<button class="g" onclick="cargarExp()">Actualizar</button><button class="ok" onclick="xlsExp()">Descargar Excel</button></div>';
+  if (canEd) h += '<div class="hint">Edita los campos de factura y da clic en <b>Guardar</b> en la fila. Los PDF se suben a la carpeta de Drive del expediente.</div>';
+  h += '<div class="wrap"><table><thead><tr><th>Acciones</th>' + cols.map(function (i) { return '<th>' + esc(j.headers[i]) + '</th>'; }).join('') + '</tr></thead><tbody>';
+  if (!S.view.length) h += '<tr><td colspan="' + (cols.length + 1) + '" class="empty">Sin registros.</td></tr>';
+  S.view.forEach(function (r, n) {
+    h += '<tr data-n="' + n + '" onclick="selFila(' + n + ')"><td>' +
+      '<button class="be" onclick="event.stopPropagation();abrirDetalle(' + n + ')">' + (S.ses.editDet.length && area !== 'DOCUMENTOS' && !logi ? 'Editar' : 'Ver detalle') + '</button>' +
+      (canEd ? ' <button class="ok" onclick="event.stopPropagation();guardarExp(' + n + ')">Guardar</button>' : '') + '</td>';
+    cols.forEach(function (i) {
+      var v = r.v[i], isU = /^https?:\/\//.test(v);
+      if (canEd && E_EDIT.indexOf(i) >= 0) h += '<td><input data-c="' + i + '" value="' + esc(v) + '" oninput="this.closest(\'tr\').classList.add(\'dirty\')" onclick="event.stopPropagation()"></td>';
+      else if (E_FILES.indexOf(i) >= 0) h += '<td onclick="event.stopPropagation()"><span class="fl">' + (isU ? '<a class="lnk" target="_blank" href="' + esc(v) + '">Ver archivo</a>' : '') + '</span>' +
+        (canEd ? ' <input type="file" accept=".pdf,.xml,.jpg,.jpeg,.png" style="width:170px" onchange="subir(' + n + ',' + i + ',this)">' : '') + '</td>';
+      else if (i === X.ODS) h += '<td><span class="lnk" onclick="event.stopPropagation();abrirDetalle(' + n + ')">' + esc(v) + '</span></td>';
+      else if (logi && i === X.LIM) { var dd = diasPara(v); h += '<td>' + ((dd !== null && dd >= 0 && dd <= 2) ? '<span title="Vence en ' + dd + ' día(s)" style="color:var(--bad);font-size:1rem">⚠️</span> ' : '') + esc(v) + '</td>'; }
+      else h += '<td class="ro">' + esc(v) + '</td>';
+    });
+    h += '</tr>';
+  });
+  $('main').innerHTML = h + '</tbody></table></div>';
+}
+function selFila(n) {
+  var t = document.querySelectorAll('#main tr.sel'); t.forEach(function (x) { x.classList.remove('sel'); });
+  var r = document.querySelector('#main tr[data-n="' + n + '"]'); if (r) r.classList.add('sel');
+}
+function guardarExp(n) {
+  var tr = document.querySelector('#main tr[data-n="' + n + '"]'), r = S.view[n], cambios = {};
+  tr.querySelectorAll('input[data-c]').forEach(function (inp) { cambios[inp.dataset.c] = inp.value; });
+  busy(true);
+  post('guardarexp', { r: r.r, idExp: r.v[0], cambios: cambios }).then(function (j) {
+    busy(false);
+    if (!j.ok) return Swal.fire('Error', j.error, 'error');
+    Object.keys(cambios).forEach(function (c) { r.v[c] = cambios[c]; }); tr.classList.remove('dirty'); toast('Guardado');
+  }).catch(function (e) { busy(false); if (e.message !== 'noAuth') Swal.fire('Error', e.message, 'error'); });
+}
+function subir(n, col, inp) {
+  var f = inp.files[0]; if (!f) return;
+  if (f.size > 8 * 1024 * 1024) { inp.value = ''; return Swal.fire('Archivo grande', 'El archivo supera 8 MB.', 'warning'); }
+  var r = S.view[n], rd = new FileReader();
+  rd.onload = function () {
+    busy(true);
+    post('subir', { r: r.r, idExp: r.v[0], col: col, nombre: f.name, mime: f.type, data: String(rd.result).split(',')[1] }).then(function (j) {
+      busy(false); inp.value = '';
+      if (!j.ok) return Swal.fire('Error', j.error, 'error');
+      r.v[col] = j.url; inp.parentNode.querySelector('.fl').innerHTML = '<a class="lnk" target="_blank" href="' + esc(j.url) + '">Ver archivo</a>'; toast('Archivo cargado');
+    }).catch(function (e) { busy(false); if (e.message !== 'noAuth') Swal.fire('Error', e.message, 'error'); });
+  };
+  rd.readAsDataURL(f);
+}
+function xlsExp() {
+  var j = S.exp, cols = []; j.headers.forEach(function (h, i) { if (HID_EXP.indexOf(i) < 0) cols.push(i); });
+  xls(cols.map(function (i) { return j.headers[i]; }), S.view.map(function (r) { return cols.map(function (i) { return r.v[i]; }); }), 'EXPEDIENTES_' + S.tab);
+}
+function xls(head, filas, nombre) {
+  var ws = XLSX.utils.aoa_to_sheet([head].concat(filas)), wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Datos'); XLSX.writeFile(wb, nombre + '_' + new Date().toISOString().slice(0, 10) + '.xlsx');
+}
+
+/* ── Detalle (CUADRO ACTUAL filtrado por ID EXPEDIENTE) ── */
+function abrirDetalle(n) {
+  var r = S.view[n]; busy(true);
+  api('detalle', { idExp: r.v[0] }).then(function (j) {
+    busy(false);
+    if (!j.ok) return Swal.fire('Error', j.error, 'error');
+    S.det = { idExp: r.v[0], ods: r.v[X.ODS], hosp: r.v[X.HOSP], headers: j.headers, rows: j.rows, dirty: {} };
+    S.tab = 'DETALLE'; pintarTabs(); pintar();
+  }).catch(function (e) { busy(false); if (e.message !== 'noAuth') Swal.fire('Error', e.message, 'error'); });
+}
+function cerrarDetalle() {
+  var d = S.det, sucio = d && Object.keys(d.dirty).length;
+  var ir = function () { S.det = null; S.tab = S.ses.vistas[0]; pintarTabs(); pintar(); };
+  if (!sucio) return ir();
+  Swal.fire({ title: 'Hay cambios sin guardar', text: '¿Cerrar y perderlos?', icon: 'warning', showCancelButton: true, confirmButtonText: 'Cerrar', cancelButtonText: 'Volver' }).then(function (x) { if (x.isConfirmed) ir(); });
+}
+function actualizarDetalle() {
+  var d = S.det; busy(true);
+  api('detalle', { idExp: d.idExp }).then(function (j) { busy(false); if (j.ok) { d.rows = j.rows; d.headers = j.headers; d.dirty = {}; pintarDetalle(); toast('Actualizado'); } })
+    .catch(function (e) { busy(false); if (e.message !== 'noAuth') Swal.fire('Error', e.message, 'error'); });
+}
+function edCol(i) { return S.ses.editDet.indexOf(i) >= 0; }
+function repCols() { return REPET.filter(edCol); }
+function pintarDetalle() {
+  var d = S.det, ed = S.ses.editDet.length > 0, rc = repCols(), cols = [];
+  d.headers.forEach(function (h, i) { if (HID_DET.indexOf(i) < 0) cols.push(i); });
+  var h = '<div class="bar"><h2>ODS ' + esc(d.ods) + ' · ' + esc(d.hosp) + ' · ' + d.rows.length + ' clave(s)</h2>' +
+    (rc.length ? '<button class="w" onclick="repetirTodas()">Repetir datos en todas las filas</button>' : '') +
+    (ed ? '<button class="ok" onclick="guardarDetalle()">Guardar cambios</button>' : '') +
+    '<button class="g" onclick="actualizarDetalle()">Actualizar</button><button class="ok" onclick="xlsDet()">Descargar Excel</button><button class="bad" onclick="cerrarDetalle()">Cerrar</button></div>';
+  if (ed) h += '<div class="hint">Solo puedes editar las columnas de tu área. Revisa los datos antes de guardar.</div>';
+  h += '<div class="wrap"><table><thead><tr><th>#</th>' + cols.map(function (i) { return '<th>' + esc(d.headers[i]) + '</th>'; }).join('') + '</tr></thead><tbody>';
+  if (!d.rows.length) h += '<tr><td colspan="' + (cols.length + 1) + '" class="empty">Este expediente no tiene claves en CUADRO ACTUAL.</td></tr>';
+  d.rows.forEach(function (r, n) {
+    h += '<tr data-n="' + n + '"><td>' + (n + 1) + (rc.length && n > 0 ? '<br><button class="w" style="font-size:.68rem;padding:4px 6px" onclick="repetirAnterior(' + n + ')">Repetir datos de la fila anterior</button>' : '') + '</td>';
+    cols.forEach(function (i) {
+      var v = r.v[i];
+      if (edCol(i)) h += '<td><input data-c="' + i + '" type="' + (C_FECHAS.indexOf(i) >= 0 ? 'date' : C_NUM.indexOf(i) >= 0 ? 'number' : 'text') + '" ' + (C_NUM.indexOf(i) >= 0 ? 'min="0" step="any" ' : '') + 'value="' + esc(v) + '" oninput="marcar(' + n + ',' + i + ',this)"></td>';
+      else h += '<td class="ro">' + esc(v) + '</td>';
+    });
+    h += '</tr>';
+  });
+  $('main').innerHTML = h + '</tbody></table></div>';
+}
+function marcar(n, c, inp) {
+  var d = S.det; (d.dirty[n] = d.dirty[n] || {})[c] = inp.value; inp.closest('tr').classList.add('dirty');
+}
+function copiar(desde, hacia) {
+  var rc = repCols(), a = document.querySelector('#main tr[data-n="' + desde + '"]'), b = document.querySelector('#main tr[data-n="' + hacia + '"]');
+  rc.forEach(function (c) {
+    var o = a.querySelector('input[data-c="' + c + '"]'), t = b.querySelector('input[data-c="' + c + '"]');
+    if (o && t) { t.value = o.value; t.dispatchEvent(new Event('input')); }
+  });
+}
+function avisoRepetir(txt) {
+  return Swal.fire({ icon: 'warning', title: 'Revisa los datos antes de guardar', text: txt, showCancelButton: true, confirmButtonText: 'Repetir', cancelButtonText: 'Cancelar' });
+}
+function repetirAnterior(n) { avisoRepetir('Se copiarán los datos de la fila anterior a esta fila.').then(function (x) { if (x.isConfirmed) copiar(n - 1, n); }); }
+function repetirTodas() {
+  avisoRepetir('Se copiarán los datos de la primera fila a todas las demás filas.').then(function (x) {
+    if (x.isConfirmed) for (var n = 1; n < S.det.rows.length; n++) copiar(0, n);
+  });
+}
+function guardarDetalle() {
+  var d = S.det, items = [];
+  Object.keys(d.dirty).forEach(function (n) { var r = d.rows[n]; items.push({ r: r.r, id: r.v[0], cambios: d.dirty[n] }); });
+  if (!items.length) return toast('No hay cambios por guardar', 'info');
+  busy(true);
+  post('guardardetalle', { idExp: d.idExp, items: items }).then(function (j) {
+    busy(false);
+    if (!j.ok) return Swal.fire('Error', j.error, 'error');
+    Object.keys(d.dirty).forEach(function (n) { for (var c in d.dirty[n]) d.rows[n].v[c] = d.dirty[n][c]; });
+    d.dirty = {}; document.querySelectorAll('#main tr.dirty').forEach(function (t) { t.classList.remove('dirty'); }); toast('Guardado (' + j.guardadas + ' fila(s))');
+  }).catch(function (e) { busy(false); if (e.message !== 'noAuth') Swal.fire('Error', e.message, 'error'); });
+}
+function xlsDet() {
+  var d = S.det, cols = []; d.headers.forEach(function (h, i) { if (HID_DET.indexOf(i) < 0) cols.push(i); });
+  xls(cols.map(function (i) { return d.headers[i]; }), d.rows.map(function (r, n) { return cols.map(function (i) { var x = d.dirty[n]; return (x && x[i] !== undefined) ? x[i] : r.v[i]; }); }), 'ODS_' + d.ods);
+}
+
+/* ── Inicio ── */
+if (S.ses && S.ses.token) { api('expedientes').then(function (j) { if (j && j.ok) entrar(); }).catch(function () {}); }
+</script>
+</body>
+</html>
